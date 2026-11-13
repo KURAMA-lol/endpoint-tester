@@ -47,4 +47,22 @@ $("selProvider").onchange=()=>setP($("selProvider").value);
 $("selModel").onchange=()=>{const p=P();if(p){p.model=$("selModel").value;save();rP()}};
 $("sendBtn").onclick=send;
 $("userInput").onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}};
+
+function setAccent(a){
+  document.documentElement.setAttribute('data-accent', a);
+  localStorage.setItem('et-accent', a);
+  document.querySelectorAll('.accent-dot').forEach(function(el){
+    el.classList.toggle('on', el.getAttribute('data-accent')===a);
+  });
+}
+(function initAccent(){
+  var a=localStorage.getItem('et-accent')||'violet';
+  setAccent(a);
+  var row=document.getElementById('accentRow');
+  if(row) row.addEventListener('click',function(e){
+    var btn=e.target.closest('[data-accent]');
+    if(btn) setAccent(btn.getAttribute('data-accent'));
+  });
+})();
+
 load();rP();rC();fS();rM();ui();
