@@ -13,16 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
-
       - name: Ensure debug keystore
         run: |
           if [ ! -f app/debug.keystore ]; then
@@ -31,33 +28,24 @@ jobs:
               -storepass android -keypass android \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
-          ls -la app/debug.keystore
-
       - name: Stage web UI into assets
         run: |
           mkdir -p app/src/main/assets
-          cp -f index.html app/src/main/assets/ || true
-          cp -f app.js app/src/main/assets/ || true
-          cp -f manifest.json app/src/main/assets/ || true
-          cp -f sw.js app/src/main/assets/ || true
+          cat app.part0.js app.part1.js app.part2.js > app.js
+          cp -f index.html app.js manifest.json sw.js app/src/main/assets/ 2>/dev/null || true
           ls -la app/src/main/assets/
-
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
-
       - name: Prepare APK
         run: cp app/build/outputs/apk/debug/app-debug.apk endpoint-tester.apk
-
       - uses: actions/upload-artifact@v4
         with:
           name: endpoint-tester-apk
           path: endpoint-tester.apk
-
       - name: Replace old release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete latest-build --cleanup-tag -y || true
-
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -67,6 +55,4 @@ jobs:
           files: endpoint-tester.apk
           make_latest: true
           body: |
-            Download **endpoint-tester.apk** and install on your Android phone.
-
-            v1.2 — native HTTP (no CORS), fetch models, better errors.
+            v1.3 — multi-provider profiles, liquid glass UI, SVG icons.
