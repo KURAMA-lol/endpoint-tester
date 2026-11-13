@@ -1,47 +1,20 @@
 # Endpoint Tester
 
-Minimal liquid-glass chat UI for testing any LLM endpoint:
+Test any OpenAI-compatible, Gemini, or keyless LLM endpoint.
 
-- **OpenAI-compatible** (OpenAI, Groq, Together, Fireworks, Ollama, LM Studio, vLLM, proxies…)
-- **Google Gemini**
-- **Keyless / custom** endpoints
+## Download APK
 
-Pure static PWA — no build step, no dependencies. Installable on Android/iOS like a native app.
+Go to **[Releases → latest-build](https://github.com/KURAMA-lol/endpoint-tester/releases/tag/latest-build)** and download `endpoint-tester.apk`.
+
+Install on your phone (allow unknown sources if asked).
 
 ## Features
 
-- Dark & light themes (auto + toggle)
-- Streaming & non-streaming
-- System prompt, temperature, max tokens, extra headers
-- Settings persisted in localStorage
-- Connection test
-- Mobile-friendly drawer + PWA install
+- OpenAI-compatible / Gemini / keyless endpoints
+- Dark & light themes
+- Streaming chat
+- System prompt, temperature, max tokens
 
-## Live / Install
+## Build
 
-1. Open the GitHub Pages URL (or open `index.html` locally).
-2. On Android Chrome: menu → **Add to Home screen** / **Install app**.
-3. It runs fullscreen like a native app.
-
-## Deploy
-
-```bash
-# after cloning or creating the repo
-# enable GitHub Pages: Settings → Pages → Deploy from branch → main / (root)
-```
-
-## Providers
-
-| Type              | Base URL example                                      | Key        |
-|-------------------|-------------------------------------------------------|------------|
-| OpenAI            | `https://api.openai.com/v1`                           | required   |
-| Groq              | `https://api.groq.com/openai/v1`                      | required   |
-| Ollama (local)    | `http://localhost:11434/v1`                           | optional   |
-| LM Studio         | `http://localhost:1234/v1`                            | optional   |
-| Gemini            | `https://generativelanguage.googleapis.com/v1beta`    | required   |
-
-**CORS:** Browsers enforce CORS. Many cloud providers allow it; local servers often need CORS enabled.
-
-## License
-
-MIT
+Push to `main` or run the **Build APK** workflow. CI produces the release automatically (same flow as the Mochi app).
