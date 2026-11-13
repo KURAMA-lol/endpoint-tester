@@ -23,6 +23,28 @@ jobs:
         with:
           gradle-version: 8.7
 
+      - name: Ensure debug keystore
+        run: |
+          if [ ! -f app/debug.keystore ]; then
+            keytool -genkeypair -v -keystore app/debug.keystore \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Stage web UI into assets
+        run: |
+          mkdir -p app/src/main/assets
+          # Prefer dedicated assets, else use root index.html
+          if [ -f app/src/main/assets/index.html ]; then
+            echo "assets already present"
+          elif [ -f index.html ]; then
+            cp index.html app/src/main/assets/
+            [ -f manifest.json ] && cp manifest.json app/src/main/assets/ || true
+            [ -f sw.js ] && cp sw.js app/src/main/assets/ || true
+          fi
+          ls -la app/src/main/assets/
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
 
