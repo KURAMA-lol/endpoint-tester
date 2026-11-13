@@ -31,18 +31,15 @@ jobs:
               -storepass android -keypass android \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
+          ls -la app/debug.keystore
 
       - name: Stage web UI into assets
         run: |
           mkdir -p app/src/main/assets
-          # Prefer dedicated assets, else use root index.html
-          if [ -f app/src/main/assets/index.html ]; then
-            echo "assets already present"
-          elif [ -f index.html ]; then
-            cp index.html app/src/main/assets/
-            [ -f manifest.json ] && cp manifest.json app/src/main/assets/ || true
-            [ -f sw.js ] && cp sw.js app/src/main/assets/ || true
-          fi
+          cp -f index.html app/src/main/assets/ || true
+          cp -f app.js app/src/main/assets/ || true
+          cp -f manifest.json app/src/main/assets/ || true
+          cp -f sw.js app/src/main/assets/ || true
           ls -la app/src/main/assets/
 
       - name: Build debug APK
@@ -72,4 +69,4 @@ jobs:
           body: |
             Download **endpoint-tester.apk** and install on your Android phone.
 
-            Allow install from unknown sources if prompted.
+            v1.2 — native HTTP (no CORS), fetch models, better errors.
