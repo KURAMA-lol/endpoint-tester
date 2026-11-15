@@ -2,11 +2,16 @@ package com.endpointtester.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -17,6 +22,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -27,6 +33,13 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private val executor = Executors.newCachedThreadPool()
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+
+    companion object {
+        private const val REQ_FILE = 2001
+        private const val DATA_PREFS = "app_data_backup"
+        private const val KEY_SNAPSHOT = "snapshot_json"
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,16 +72,46 @@ class MainActivity : AppCompatActivity() {
 
         webView.addJavascriptInterface(NativeHttpBridge(), "NativeHttp")
         webView.addJavascriptInterface(HealthBridge(), "NativeHealth")
+        webView.addJavascriptInterface(DataBridge(), "NativeData")
 
         webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(
-                view: WebView?,
-                request: WebResourceRequest?
-            ): Boolean = false
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
         }
-        webView.webChromeClient = WebChromeClient()
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                this@MainActivity.filePathCallback?.onReceiveValue(null)
+                this@MainActivity.filePathCallback = filePathCallback
+                val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = "*/*"
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                }
+                return try {
+                    startActivityForResult(intent, REQ_FILE)
+                    true
+                } catch (e: Exception) {
+                    this@MainActivity.filePathCallback = null
+                    false
+                }
+            }
+        }
 
         webView.loadUrl("file:///android_asset/index.html")
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_FILE) {
+            val result = if (resultCode == Activity.RESULT_OK && data != null) {
+                WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+            } else null
+            filePathCallback?.onReceiveValue(result)
+            filePathCallback = null
+        }
     }
 
     private fun requestNotifPermission() {
@@ -76,11 +119,61 @@ class MainActivity : AppCompatActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED
             ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    1001
-                )
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+            }
+        }
+    }
+
+    inner class DataBridge {
+        @JavascriptInterface
+        fun saveSnapshot(json: String) {
+            getSharedPreferences(DATA_PREFS, MODE_PRIVATE)
+                .edit()
+                .putString(KEY_SNAPSHOT, json)
+                .apply()
+            // also mirror to files dir for durability within app lifecycle
+            try {
+                File(filesDir, "endpoint-backup.json").writeText(json)
+            } catch (_: Exception) {}
+        }
+
+        @JavascriptInterface
+        fun loadSnapshot(): String {
+            val prefs = getSharedPreferences(DATA_PREFS, MODE_PRIVATE).getString(KEY_SNAPSHOT, null)
+            if (!prefs.isNullOrBlank()) return prefs
+            return try {
+                val f = File(filesDir, "endpoint-backup.json")
+                if (f.exists()) f.readText() else ""
+            } catch (_: Exception) { "" }
+        }
+
+        @JavascriptInterface
+        fun exportToDownloads(json: String): String {
+            return try {
+                val name = "endpoint-tester-backup.json"
+                if (Build.VERSION.SDK_INT >= 29) {
+                    val resolver = contentResolver
+                    val values = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                        put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
+                        put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                    }
+                    val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                        ?: return "error: cannot create file"
+                    resolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                    values.clear()
+                    values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+                    "Downloads/$name"
+                } else {
+                    val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    if (!dir.exists()) dir.mkdirs()
+                    val f = File(dir, name)
+                    f.writeText(json)
+                    f.absolutePath
+                }
+            } catch (e: Exception) {
+                "error: ${e.message}"
             }
         }
     }
@@ -99,11 +192,8 @@ class MainActivity : AppCompatActivity() {
                     .putBoolean(HealthCheckReceiver.KEY_NOTIFY_DOWN, o.optBoolean("notifyDown", true))
                     .putLong(HealthCheckReceiver.KEY_INTERVAL_MS, interval)
                     .apply()
-                if (enabled) {
-                    HealthCheckReceiver.startNow(this@MainActivity)
-                } else {
-                    HealthCheckReceiver.cancel(this@MainActivity)
-                }
+                if (enabled) HealthCheckReceiver.startNow(this@MainActivity)
+                else HealthCheckReceiver.cancel(this@MainActivity)
             } catch (_: Exception) {}
         }
 
@@ -111,9 +201,7 @@ class MainActivity : AppCompatActivity() {
         fun syncProviders(json: String) {
             try {
                 getSharedPreferences(HealthCheckReceiver.PREFS, MODE_PRIVATE)
-                    .edit()
-                    .putString(HealthCheckReceiver.KEY_PROVIDERS, json)
-                    .apply()
+                    .edit().putString(HealthCheckReceiver.KEY_PROVIDERS, json).apply()
             } catch (_: Exception) {}
         }
 
@@ -191,7 +279,7 @@ class MainActivity : AppCompatActivity() {
             val errJs = if (err == null) "null" else JSONObject.quote(err)
             val bodyJs = JSONObject.quote(body)
             val headersJs = JSONObject.quote(headersJson)
-            val js = """
+            val script = """
                 (function(){
                   try {
                     var cb = window.__nativeHttpCallbacks && window.__nativeHttpCallbacks['$safeId'];
@@ -199,7 +287,7 @@ class MainActivity : AppCompatActivity() {
                   } catch (e) { console.error(e); }
                 })();
             """.trimIndent()
-            webView.post { webView.evaluateJavascript(js, null) }
+            webView.post { webView.evaluateJavascript(script, null) }
         }
     }
 
