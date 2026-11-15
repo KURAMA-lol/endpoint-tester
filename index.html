@@ -94,6 +94,25 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
 .accent-dot:hover{transform:scale(1.1)}
 .accent-dot.on{border-color:var(--text);box-shadow:0 0 0 2px var(--glow)}
 
+
+.settings-panel{display:none;position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:16px}
+.settings-panel.show{display:flex}
+.settings-card{width:100%;max-width:440px;max-height:90dvh;overflow-y:auto;background:var(--bg-elev);border:1px solid var(--stroke-h);border-radius:20px;padding:20px;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.settings-card h3{font-size:17px;font-weight:600;margin-bottom:4px}
+.settings-card .sub{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.4}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--stroke)}
+.toggle-row:last-of-type{border-bottom:none}
+.toggle-row .lbl{font-size:13px;font-weight:500}.toggle-row .hint{font-size:11px;color:var(--muted);margin-top:2px}
+.switch{position:relative;width:44px;height:26px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.switch .sl{position:absolute;inset:0;background:var(--glass-h);border:1px solid var(--stroke);border-radius:999px;cursor:pointer;transition:.2s}
+.switch .sl:before{content:"";position:absolute;width:20px;height:20px;left:2px;top:2px;background:var(--text-2);border-radius:50%;transition:.2s}
+.switch input:checked+.sl{background:linear-gradient(135deg,var(--accent),var(--accent-2));border-color:transparent}
+.switch input:checked+.sl:before{transform:translateX(18px);background:#fff}
+.status-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--stroke);background:var(--glass);color:var(--text-2);margin-top:10px}
+.status-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.status-pill.up .dot{background:#34d399}.status-pill.down .dot{background:var(--err)}
+
 </style>
 </head>
 <body>
@@ -121,9 +140,12 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
     <button type="button" class="accent-dot" data-accent="orange" style="background:linear-gradient(135deg,#fb923c,#f97316)" title="Orange"></button>
     <button type="button" class="accent-dot" data-accent="mono" style="background:linear-gradient(135deg,#e5e5e5,#737373)" title="Mono"></button>
   </div>
-  <div class="side-foot">
-    <button class="icon-btn" id="btnManage" type="button" title="Edit active provider" style="width:100%">
+  <div class="side-foot" style="display:flex;gap:6px">
+    <button class="icon-btn" id="btnManage" type="button" title="Edit active provider" style="flex:1">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+    <button class="icon-btn" id="btnSettings" type="button" title="Settings" style="flex:1">
+      <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
   </div>
 </aside>
@@ -166,6 +188,50 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
     </div>
   </div>
 </div>
+
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-card">
+    <h3>Settings</h3>
+    <p class="sub">Health checks ping each saved provider on a schedule and can notify you when they are up or down. Works in the background on Android.</p>
+
+    <div class="toggle-row">
+      <div><div class="lbl">Enable health checks</div><div class="hint">Ping all providers on an interval</div></div>
+      <label class="switch"><input type="checkbox" id="hcEnabled"/><span class="sl"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="lbl">Notify on success</div><div class="hint">Alert every time a provider is healthy</div></div>
+      <label class="switch"><input type="checkbox" id="hcNotifyOk"/><span class="sl"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="lbl">Notify on downtime</div><div class="hint">Alert when a provider fails the check</div></div>
+      <label class="switch"><input type="checkbox" id="hcNotifyDown" checked/><span class="sl"></span></label>
+    </div>
+
+    <div class="field" style="margin-top:14px">
+      <label>Check interval</label>
+      <select id="hcInterval">
+        <option value="30000">Every 30 seconds</option>
+        <option value="60000">Every 1 minute</option>
+        <option value="300000">Every 5 minutes</option>
+        <option value="900000">Every 15 minutes</option>
+        <option value="1800000">Every 30 minutes</option>
+        <option value="3600000" selected>Every 1 hour</option>
+        <option value="21600000">Every 6 hours</option>
+        <option value="43200000">Every 12 hours</option>
+        <option value="86400000">Every 24 hours</option>
+      </select>
+    </div>
+
+    <div id="hcStatusBox" class="status-pill">Status: idle</div>
+
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn ghost" type="button" id="hcClose">Close</button>
+      <button class="btn" type="button" id="hcRunNow">Check now</button>
+      <button class="btn primary" type="button" id="hcSave">Save</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

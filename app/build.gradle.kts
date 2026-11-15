@@ -9,8 +9,8 @@ android {
         applicationId = "com.endpointtester.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
     }
     signingConfigs {
         getByName("debug") {
@@ -33,4 +33,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 }
-dependencies { implementation("androidx.appcompat:appcompat:1.6.1") }
+dependencies {
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.core:core-ktx:1.12.0")
+}

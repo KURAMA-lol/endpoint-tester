@@ -75,4 +75,72 @@ function setAccent(a){
   });
 })();
 
+
+function hasHealth(){return !!(window.NativeHealth&&typeof window.NativeHealth.configure==="function")}
+function healthSettings(){
+  try{return JSON.parse(localStorage.getItem("et-health")||"null")||{enabled:false,notifyOk:false,notifyDown:true,intervalMs:3600000}}catch(e){return{enabled:false,notifyOk:false,notifyDown:true,intervalMs:3600000}}
+}
+function saveHealthLocal(s){localStorage.setItem("et-health",JSON.stringify(s))}
+function syncHealthNative(s){
+  if(!hasHealth())return;
+  try{
+    window.NativeHealth.configure(JSON.stringify({
+      enabled:!!s.enabled,notifyOk:!!s.notifyOk,notifyDown:!!s.notifyDown,intervalMs:+s.intervalMs||3600000
+    }));
+  }catch(e){}
+}
+function syncProvidersNative(){
+  if(!hasHealth())return;
+  try{
+    var list=(S.providers||[]).map(function(p){return{id:p.id,name:p.name,type:p.type,baseUrl:p.baseUrl,apiKey:p.apiKey}});
+    window.NativeHealth.syncProviders(JSON.stringify(list));
+  }catch(e){}
+}
+function openSettings(){
+  var s=healthSettings();
+  $("hcEnabled").checked=!!s.enabled;
+  $("hcNotifyOk").checked=!!s.notifyOk;
+  $("hcNotifyDown").checked=s.notifyDown!==false;
+  $("hcInterval").value=String(s.intervalMs||3600000);
+  refreshHealthStatus();
+  $("settingsPanel").classList.add("show");
+  closeSide();
+}
+function closeSettings(){$("settingsPanel").classList.remove("show")}
+function saveSettings(){
+  var s={enabled:$("hcEnabled").checked,notifyOk:$("hcNotifyOk").checked,notifyDown:$("hcNotifyDown").checked,intervalMs:+$("hcInterval").value||3600000};
+  saveHealthLocal(s);
+  syncProvidersNative();
+  syncHealthNative(s);
+  refreshHealthStatus();
+  if(!hasHealth())alert("Health checks need the Android app build. Settings saved locally.");
+  else alert("Saved. Monitoring "+(s.enabled?"on":"off")+".");
+}
+function refreshHealthStatus(){
+  var box=$("hcStatusBox");if(!box)return;
+  if(!hasHealth()){box.className="status-pill";box.textContent="Web only — install APK for background checks";return}
+  try{
+    var st=JSON.parse(window.NativeHealth.getStatus()||"{}");
+    var last=st.lastRunAt?new Date(st.lastRunAt).toLocaleString():"never";
+    box.className="status-pill "+(st.enabled?"up":"");
+    box.textContent=(st.enabled?"Monitoring on":"Monitoring off")+" · last run "+last;
+  }catch(e){box.textContent="Status unavailable"}
+}
+function runHealthNow(){
+  syncProvidersNative();
+  if(hasHealth()){try{window.NativeHealth.runOnce();setTimeout(refreshHealthStatus,1500);alert("Check started — watch notifications.")}catch(e){alert(String(e))}}
+  else alert("Background checks require the Android APK.");
+}
+if($("btnSettings"))$("btnSettings").onclick=openSettings;
+if($("hcClose"))$("hcClose").onclick=closeSettings;
+if($("hcSave"))$("hcSave").onclick=saveSettings;
+if($("hcRunNow"))$("hcRunNow").onclick=runHealthNow;
+if($("settingsPanel"))$("settingsPanel").addEventListener("click",function(e){if(e.target===this)closeSettings()});
+// keep native copy of providers in sync
+(function(){
+  var _save=save;
+  save=function(){_save();try{syncProvidersNative()}catch(e){}};
+  try{syncProvidersNative();syncHealthNative(healthSettings())}catch(e){}
+})();
+
 load();rP();rC();fS();rM();ui();
