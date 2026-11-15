@@ -156,6 +156,37 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
   box-shadow:0 4px 16px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.08);
 }
 
+
+.inspector{
+  display:none;max-width:720px;margin:0 auto 8px;padding:8px 12px;border-radius:12px;
+  border:1px solid var(--stroke);background:var(--glass);font-size:11px;color:var(--text-2);
+  flex-wrap:wrap;gap:10px;align-items:center;
+}
+.inspector.show{display:flex}
+.inspector b{color:var(--text);font-weight:600}
+.inspector .chip{padding:2px 8px;border-radius:999px;border:1px solid var(--stroke);background:var(--glass-h)}
+.inspector .ok{color:#34d399}.inspector .bad{color:var(--err)}
+.msg-actions{display:flex;gap:4px;margin-top:4px;opacity:.55}
+.msg:hover .msg-actions,.msg-actions:focus-within{opacity:1}
+.msg-actions button{
+  font-size:11px;padding:3px 8px;border-radius:8px;border:1px solid var(--stroke);
+  background:var(--glass-h);color:var(--text-2)
+}
+.msg-actions button:hover{color:var(--text);border-color:var(--stroke-h)}
+.msg .bubble pre{
+  margin:8px 0;padding:10px;border-radius:10px;overflow-x:auto;
+  background:rgba(0,0,0,.25);border:1px solid var(--stroke);font-size:12px;line-height:1.45
+}
+.msg .bubble code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}
+.msg .bubble p{margin:0 0 .55em}.msg .bubble p:last-child{margin:0}
+.msg .bubble ul{margin:.4em 0 .4em 1.2em}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.presets button{
+  font-size:11px;padding:6px 10px;border-radius:999px;border:1px solid var(--stroke);
+  background:var(--glass-h);color:var(--text-2)
+}
+.presets button:hover{border-color:var(--accent);color:var(--text)}
+
 </style>
 </head>
 <body>
@@ -200,7 +231,8 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
       <div class="picker"><label>Model</label><select id="selModel"></select></div>
     </div>
   </div>
-  <div class="msgs" id="messages"><div class="msgs-inner" id="msgsInner">
+  <div class="inspector" id="inspector"></div>
+    <div class="msgs" id="messages"><div class="msgs-inner" id="msgsInner">
     <div class="empty"><div class="hero"></div><h2>Start a conversation</h2><p>Pick a provider and model, then send a message.</p></div>
   </div></div>
   <div class="composer-wrap">
@@ -215,6 +247,7 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
 <div class="modal-bg" id="providerModal">
   <div class="modal">
     <h3 id="modalTitle">Edit provider</h3>
+    <div class="presets" id="presetRow"></div>
     <div class="field"><label>Name</label><input id="fName" placeholder="My OpenAI"/></div>
     <div class="field"><label>Type</label><select id="fType"><option value="openai">OpenAI Compatible</option><option value="gemini">Google Gemini</option><option value="keyless">Keyless / Custom</option></select></div>
     <div class="field"><label>Base URL</label><input id="fUrl" type="url" placeholder="https://api.openai.com/v1"/></div>

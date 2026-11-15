@@ -1,6 +1,70 @@
 
 const $=id=>document.getElementById(id);
 const DEF={openai:{baseUrl:"https://api.openai.com/v1",model:"gpt-4o-mini"},gemini:{baseUrl:"https://generativelanguage.googleapis.com/v1beta",model:"gemini-2.0-flash"},keyless:{baseUrl:"http://127.0.0.1:11434/v1",model:"llama3.2"}};
+
+const PRESETS=[
+  {name:"OpenAI",type:"openai",baseUrl:"https://api.openai.com/v1",model:"gpt-4o-mini"},
+  {name:"OpenRouter",type:"openai",baseUrl:"https://openrouter.ai/api/v1",model:"openai/gpt-4o-mini"},
+  {name:"Groq",type:"openai",baseUrl:"https://api.groq.com/openai/v1",model:"llama-3.3-70b-versatile"},
+  {name:"Together",type:"openai",baseUrl:"https://api.together.xyz/v1",model:"meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"},
+  {name:"Gemini",type:"gemini",baseUrl:"https://generativelanguage.googleapis.com/v1beta",model:"gemini-2.0-flash"},
+  {name:"Ollama",type:"keyless",baseUrl:"http://127.0.0.1:11434/v1",model:"llama3.2"}
+];
+S.lastMeta=S.lastMeta||null;
+
+function esc(s){
+  return String(s==null?"":s).replace(/&/g,"&").replace(/</g,"<").replace(/>/g,">").replace(/"/g,""");
+}
+function md(s){
+  s=esc(s);
+  s=s.replace(/```([\s\S]*?)```/g,function(_,c){return "<pre><code>"+c.trim()+"</code></pre>";});
+  s=s.replace(/`([^`]+)`/g,"<code>$1</code>");
+  s=s.replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>");
+  s=s.replace(/^### (.+)$/gm,"<b>$1</b>");
+  s=s.replace(/^## (.+)$/gm,"<b>$1</b>");
+  s=s.replace(/^\s*[-*] (.+)$/gm,"• $1");
+  s=s.replace(/\n/g,"<br>");
+  return s;
+}
+function showInspector(meta){
+  var el=$("inspector"); if(!el)return;
+  if(!meta){el.classList.remove("show");el.innerHTML="";return}
+  S.lastMeta=meta;
+  el.classList.add("show");
+  var ok=meta.ok!==false && (!meta.status || (meta.status>=200&&meta.status<300));
+  el.innerHTML='<span class="chip "+(ok?"ok":"bad")+">'+esc(String(meta.status||(ok?"OK":"ERR")))+'</span>'
+    +'<span><b>'+esc(String(meta.latencyMs||0))+' ms</b></span>'
+    +'<span>'+esc(meta.model||"")+'</span>'
+    +'<span>'+esc(meta.provider||"")+'</span>'
+    +(meta.error?'<span class="bad">'+esc(meta.error).slice(0,80)+'</span>':'');
+}
+function copyText(t){
+  t=String(t||"");
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).catch(function(){fallbackCopy(t)});
+  else fallbackCopy(t);
+}
+function fallbackCopy(t){
+  var a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();
+  try{document.execCommand("copy")}catch(e){}
+  document.body.removeChild(a);
+}
+function fillPresets(){
+  var row=$("presetRow"); if(!row)return;
+  row.innerHTML="";
+  PRESETS.forEach(function(pr){
+    var b=document.createElement("button");
+    b.type="button"; b.textContent=pr.name;
+    b.onclick=function(){
+      $("fName").value=pr.name;
+      $("fType").value=pr.type;
+      $("fUrl").value=pr.baseUrl;
+      $("fModel").value=pr.model;
+      $("fKeyWrap").style.display=pr.type==="keyless"?"none":"block";
+    };
+    row.appendChild(b);
+  });
+}
+
 const S={providers:[],chats:[],pid:null,cid:null,streaming:false,editId:null};
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 function blankP(x={}){const t=x.type||"openai",d=DEF[t];return{id:x.id||uid("p"),name:x.name||"Provider",type:t,baseUrl:x.baseUrl||d.baseUrl,apiKey:x.apiKey||"",model:x.model||d.model,models:x.models||[],temperature:x.temperature??.7,maxTokens:x.maxTokens||1024,stream:x.stream??true,systemPrompt:x.systemPrompt||""}}
@@ -28,7 +92,29 @@ const ferr=(s,b)=>typeof b==="string"?s+": "+b.slice(0,250):s+": "+(b?.error?.me
 function rP(){const L=$("providerList");L.innerHTML="";S.providers.forEach(p=>{const el=document.createElement("div");el.className="item"+(p.id===S.pid?" active":"");el.innerHTML=`<span class="dot-p"></span><div class="meta"><div class="name"></div><div class="sub"></div></div><div class="act"><button type="button" data-e title="Edit">Edit</button><button type="button" data-d class="danger" title="Delete">Del</button></div>`;el.querySelector(".name").textContent=p.name;el.querySelector(".sub").textContent=(p.model||p.type)+" · "+host(p.baseUrl);el.onclick=e=>{if(e.target.closest("[data-e]")){e.stopPropagation();openM(p.id);return}if(e.target.closest("[data-d]")){e.stopPropagation();delP(p.id);return}setP(p.id)};L.appendChild(el)});fS()}
 function rC(){const L=$("chatList");L.innerHTML="";const sorted=[...S.chats].sort((a,b)=>b.createdAt-a.createdAt);if(!sorted.length){L.innerHTML='<div style="padding:8px;font-size:12px;color:var(--muted)">No chats yet</div>';return}sorted.forEach(c=>{const p=S.providers.find(x=>x.id===c.providerId);const el=document.createElement("div");el.className="item"+(c.id===S.cid?" active":"");el.innerHTML=`<div class="meta"><div class="name"></div><div class="sub"></div></div><div class="act"><button type="button" data-d class="danger">Del</button></div>`;el.querySelector(".name").textContent=c.title||"New chat";el.querySelector(".sub").textContent=p?p.name:"";el.onclick=e=>{if(e.target.closest("[data-d]")){e.stopPropagation();delC(c.id);return}setC(c.id)};L.appendChild(el)})}
 function fS(){const sp=$("selProvider"),sm=$("selModel");sp.innerHTML="";S.providers.forEach(p=>{const o=document.createElement("option");o.value=p.id;o.textContent=p.name;sp.appendChild(o)});if(S.pid)sp.value=S.pid;const p=P();sm.innerHTML="";if(!p)return;let ms=p.models?.length?p.models:(p.model?[p.model]:[]);if(p.model&&!ms.includes(p.model))ms.unshift(p.model);if(!ms.length){const o=document.createElement("option");o.value="";o.textContent="Edit provider to set model";sm.appendChild(o)}else{ms.forEach(m=>{const o=document.createElement("option");o.value=m;o.textContent=m;sm.appendChild(o)});sm.value=p.model||ms[0]}}
-function rM(){const inner=$("msgsInner");const c=C();inner.innerHTML="";if(!c?.messages?.length){inner.innerHTML='<div class="empty"><div class="hero"></div><h2>Start a conversation</h2><p>Pick provider & model above, then message.</p></div>';return}c.messages.forEach(m=>{const row=document.createElement("div");if(m.role==="error"||m.role==="system"){row.className="msg "+(m.role==="error"?"err":"sys");row.innerHTML='<div class="bubble"></div>';row.querySelector(".bubble").textContent=m.content}else{const u=m.role==="user";row.className="msg "+(u?"user":"bot");row.innerHTML=`<div class="av">${u?"U":"AI"}</div><div class="bubble"></div>`;row.querySelector(".bubble").textContent=m.content}inner.appendChild(row)});$("messages").scrollTop=$("messages").scrollHeight}
+function rM(){const inner=$("msgsInner");const c=C();inner.innerHTML="";if(!c?.messages?.length){inner.innerHTML='<div class="empty"><div class="hero"></div><h2>Start a conversation</h2><p>Pick provider & model above, then message.</p></div>';return}c.messages.forEach((m,idx)=>{
+  const row=document.createElement("div");
+  if(m.role==="error"||m.role==="system"){
+    row.className="msg "+(m.role==="error"?"err":"sys");
+    row.innerHTML='<div class="bubble"></div>';
+    row.querySelector(".bubble").textContent=m.content;
+  }else{
+    const u=m.role==="user";
+    row.className="msg "+(u?"user":"bot");
+    row.innerHTML='<div class="av">'+(u?"U":"AI")+'</div><div class="col" style="min-width:0"><div class="bubble"></div><div class="msg-actions"></div></div>';
+    row.querySelector(".bubble").innerHTML=md(m.content||"");
+    const act=row.querySelector(".msg-actions");
+    const bCopy=document.createElement("button");bCopy.type="button";bCopy.textContent="Copy";
+    bCopy.onclick=function(e){e.stopPropagation();copyText(m.content||"");bCopy.textContent="Copied";setTimeout(function(){bCopy.textContent="Copy"},900)};
+    act.appendChild(bCopy);
+    if(!u && idx===c.messages.length-1){
+      const bReg=document.createElement("button");bReg.type="button";bReg.textContent="Regenerate";
+      bReg.onclick=function(e){e.stopPropagation();regenerate()};
+      act.appendChild(bReg);
+    }
+  }
+  inner.appendChild(row);
+});$("messages").scrollTop=$("messages").scrollHeight}
 function ui(){const p=P(),ok=p&&p.baseUrl&&(p.model||$("selModel").value);$("userInput").disabled=!ok||S.streaming;$("sendBtn").disabled=!ok||S.streaming}
 function setP(id){S.pid=id;fS();rP();ui();save()}
 function setC(id){S.cid=id;const c=C();if(c?.providerId&&S.providers.some(p=>p.id===c.providerId))S.pid=c.providerId;rC();rP();fS();rM();ui();save();closeSide()}
@@ -45,6 +131,20 @@ async function callOA(p,msgs,stream){const h={"Content-Type":"application/json"}
 async function callG(p,msgs,stream){if(!p.apiKey)throw new Error("API key required");const base=p.baseUrl.replace(/\/+$/,"");const contents=[];let sys=null;for(const m of msgs){if(m.role==="system"){sys={parts:[{text:m.content}]};continue}contents.push({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]})}const use=stream&&!hasN();const ep=use?base+"/models/"+p.model+":streamGenerateContent?alt=sse&key="+encodeURIComponent(p.apiKey):base+"/models/"+p.model+":generateContent?key="+encodeURIComponent(p.apiKey);const body={contents,generationConfig:{temperature:p.temperature,maxOutputTokens:p.maxTokens}};if(sys)body.systemInstruction=sys;const r=await http(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!r.ok){const t=r._n?r._b:await r.text();let j;try{j=JSON.parse(t)}catch{j=t}throw new Error(ferr(r.status,j))}return{res:r,streamed:use}}
 async function body(r,type){if(r._n){const j=JSON.parse(r._b||"{}");return type==="gemini"?(j.candidates?.[0]?.content?.parts?.[0]?.text||JSON.stringify(j)):(j.choices?.[0]?.message?.content||JSON.stringify(j))}const j=await r.json();return type==="gemini"?(j.candidates?.[0]?.content?.parts?.[0]?.text||JSON.stringify(j)):(j.choices?.[0]?.message?.content||JSON.stringify(j))}
 function ensure(){let c=C();if(!c){c=blankC(S.pid);S.chats.unshift(c);S.cid=c.id;rC()}return c}
+
+async function regenerate(){
+  const c=C(); if(!c||S.streaming)return;
+  // remove last assistant/error, resend last user
+  while(c.messages.length && c.messages[c.messages.length-1].role!=="user")c.messages.pop();
+  const last=c.messages[c.messages.length-1];
+  if(!last||last.role!=="user")return;
+  const text=last.content;
+  c.messages.pop();
+  rM();
+  $("userInput").value=text;
+  await send();
+}
+
 async function send(){const text=$("userInput").value.trim();if(!text||S.streaming)return;const p=P();if(!p)return;p.model=$("selModel").value||p.model;const c=ensure();if(c.title==="New chat")c.title=text.slice(0,40);c.providerId=p.id;const api=[];if(p.systemPrompt)api.push({role:"system",content:p.systemPrompt});for(const m of c.messages)if(m.role==="user"||m.role==="assistant")api.push(m);api.push({role:"user",content:text});c.messages.push({role:"user",content:scrub(text)});$("userInput").value="";rM();rC();S.streaming=true;ui();c.messages.push({role:"assistant",content:"..."});rM();try{const{res}=p.type==="gemini"?await callG(p,api,false):await callOA(p,api,false);const full=await body(res,p.type)||"(empty)";c.messages[c.messages.length-1].content=scrub(full);rM();save()}catch(e){c.messages.pop();c.messages.push({role:"error",content:e.message||String(e)});rM();save()}finally{S.streaming=false;ui();rC()}}
 function theme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("et-theme",t)}
 $("themeBtn").onclick=()=>theme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
