@@ -38,10 +38,19 @@ svg{stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-
 .main{display:flex;flex-direction:column;min-width:0;min-height:0;height:100%;max-height:100%;overflow:hidden}
 .topbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--stroke);background:var(--glass);backdrop-filter:blur(var(--blur));flex-shrink:0;z-index:5;position:relative}
 .topbar .menu-m{display:none}
-.pickers{display:flex;gap:8px;flex:1;min-width:0;flex-wrap:wrap}
-.picker{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;border:1px solid var(--stroke);background:var(--glass-h);font-size:12px;font-weight:500;color:var(--text)}
-.picker select{appearance:none;border:none;background:transparent;outline:none;cursor:pointer;font-size:12px;font-weight:500;max-width:160px;color:var(--text)}
-.picker label{font-size:11px;color:var(--muted);font-weight:500}
+.pickers{display:flex;gap:8px;flex:1;min-width:0;flex-wrap:wrap;align-items:center}
+.picker{display:flex;align-items:center;gap:8px;padding:4px 4px 4px 12px;border-radius:14px;border:1px solid var(--stroke-h);background:var(--glass-h);font-size:13px;font-weight:500;color:var(--text);min-height:44px;flex:1;min-width:140px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.picker select{
+  -webkit-appearance:menulist;appearance:menulist;
+  border:none;background:transparent;outline:none;cursor:pointer;
+  font-size:13px;font-weight:600;color:var(--text)!important;
+  flex:1;min-width:0;min-height:40px;padding:8px 28px 8px 4px;
+  pointer-events:auto;z-index:2;position:relative;
+}
+.picker label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}
+.picker select:disabled{opacity:.5}
+.topbar{z-index:6}
+.inspector{position:relative;z-index:1}
 .msgs{flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto;padding:24px 16px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .msgs-inner{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px;align-items:stretch}
 .msg{display:flex;gap:10px;align-items:flex-end;max-width:85%}
