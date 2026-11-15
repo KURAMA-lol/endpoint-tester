@@ -9,22 +9,30 @@ android {
         applicationId = "com.endpointtester.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 9
+        versionName = "1.8"
     }
     signingConfigs {
-        getByName("debug") {
-            storeFile = file("debug.keystore")
+        create("release") {
+            storeFile = file("debug.p12")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
+            storeType = "pkcs12"
+        }
+        getByName("debug") {
+            storeFile = file("debug.p12")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeType = "pkcs12"
         }
     }
     buildTypes {
         debug { signingConfig = signingConfigs.getByName("debug") }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

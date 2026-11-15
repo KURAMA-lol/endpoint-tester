@@ -20,19 +20,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
-      - name: Ensure debug keystore
+      - name: Decode stable signing keystore
         run: |
-          if [ ! -f app/debug.keystore ]; then
-            keytool -genkeypair -v -keystore app/debug.keystore \
-              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass android -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          base64 -d app/debug.p12.b64 > app/debug.p12
+          ls -la app/debug.p12
       - name: Stage web UI into assets
         run: |
           mkdir -p app/src/main/assets
           cat app.part0.js app.part1.js app.part2.js > app.js
-          cp -f index.html app.js manifest.json sw.js app/src/main/assets/ 2>/dev/null || true
+          cp -f index.html app.js app/src/main/assets/
           ls -la app/src/main/assets/
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
@@ -45,14 +41,6 @@ jobs:
       - name: Replace old release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release delete latest-build --cleanup-tag -y || true
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest-build
-          name: Endpoint Tester - latest build
-          target_commitish: ${{ github.sha }}
-          files: endpoint-tester.apk
-          make_latest: true
-          body: |
-            v1.3 — multi-provider profiles, liquid glass UI, SVG icons.
+        run: |
+          gh release delete latest-build --yes || true
+          gh release create latest-build endpoint-tester.apk             --title "Latest build"             --notes "Install over previous build (same signing key). Export providers in Settings before any wipe."
