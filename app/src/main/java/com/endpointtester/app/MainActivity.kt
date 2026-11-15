@@ -191,6 +191,8 @@ class MainActivity : AppCompatActivity() {
                     .putBoolean(HealthCheckReceiver.KEY_NOTIFY_OK, o.optBoolean("notifyOk", false))
                     .putBoolean(HealthCheckReceiver.KEY_NOTIFY_DOWN, o.optBoolean("notifyDown", true))
                     .putLong(HealthCheckReceiver.KEY_INTERVAL_MS, interval)
+                    .putBoolean(HealthCheckReceiver.KEY_SOUND, o.optBoolean("sound", true))
+                    .putBoolean(HealthCheckReceiver.KEY_VIBRATE, o.optBoolean("vibrate", true))
                     .apply()
                 if (enabled) HealthCheckReceiver.startNow(this@MainActivity)
                 else HealthCheckReceiver.cancel(this@MainActivity)
@@ -223,6 +225,7 @@ class MainActivity : AppCompatActivity() {
                 .put("intervalMs", prefs.getLong(HealthCheckReceiver.KEY_INTERVAL_MS, 3_600_000L))
                 .put("lastRunAt", prefs.getLong("last_run_at", 0L))
                 .put("lastStatus", prefs.getString(HealthCheckReceiver.KEY_LAST_STATUS, "{}"))
+                .put("lastSkip", prefs.getString("last_skip_reason", ""))
                 .toString()
         }
     }

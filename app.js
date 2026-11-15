@@ -78,14 +78,14 @@ function setAccent(a){
 
 function hasHealth(){return !!(window.NativeHealth&&typeof window.NativeHealth.configure==="function")}
 function healthSettings(){
-  try{return JSON.parse(localStorage.getItem("et-health")||"null")||{enabled:false,notifyOk:false,notifyDown:true,intervalMs:3600000}}catch(e){return{enabled:false,notifyOk:false,notifyDown:true,intervalMs:3600000}}
+  try{return JSON.parse(localStorage.getItem("et-health")||"null")||{enabled:false,notifyOk:false,notifyDown:true,intervalMs:3600000,sound:true,vibrate:true}}catch(e){return{enabled:false,notifyOk:false,notifyDown:true,intervalMs:3600000}}
 }
 function saveHealthLocal(s){localStorage.setItem("et-health",JSON.stringify(s))}
 function syncHealthNative(s){
   if(!hasHealth())return;
   try{
     window.NativeHealth.configure(JSON.stringify({
-      enabled:!!s.enabled,notifyOk:!!s.notifyOk,notifyDown:!!s.notifyDown,intervalMs:+s.intervalMs||3600000
+      enabled:!!s.enabled,notifyOk:!!s.notifyOk,notifyDown:!!s.notifyDown,intervalMs:+s.intervalMs||3600000,sound:s.sound!==false,vibrate:s.vibrate!==false
     }));
   }catch(e){}
 }
@@ -101,6 +101,8 @@ function openSettings(){
   $("hcEnabled").checked=!!s.enabled;
   $("hcNotifyOk").checked=!!s.notifyOk;
   $("hcNotifyDown").checked=s.notifyDown!==false;
+  if($("hcSound"))$("hcSound").checked=s.sound!==false;
+  if($("hcVibrate"))$("hcVibrate").checked=s.vibrate!==false;
   $("hcInterval").value=String(s.intervalMs||3600000);
   refreshHealthStatus();
   $("settingsPanel").classList.add("show");
@@ -108,7 +110,7 @@ function openSettings(){
 }
 function closeSettings(){$("settingsPanel").classList.remove("show")}
 function saveSettings(){
-  var s={enabled:$("hcEnabled").checked,notifyOk:$("hcNotifyOk").checked,notifyDown:$("hcNotifyDown").checked,intervalMs:+$("hcInterval").value||3600000};
+  var s={enabled:$("hcEnabled").checked,notifyOk:$("hcNotifyOk").checked,notifyDown:$("hcNotifyDown").checked,intervalMs:+$("hcInterval").value||3600000,sound:!$("hcSound")||$("hcSound").checked,vibrate:!$("hcVibrate")||$("hcVibrate").checked};
   saveHealthLocal(s);
   syncProvidersNative();
   syncHealthNative(s);
@@ -123,7 +125,7 @@ function refreshHealthStatus(){
     var st=JSON.parse(window.NativeHealth.getStatus()||"{}");
     var last=st.lastRunAt?new Date(st.lastRunAt).toLocaleString():"never";
     box.className="status-pill "+(st.enabled?"up":"");
-    box.textContent=(st.enabled?"Monitoring on":"Monitoring off")+" · last run "+last;
+    var skip=st.lastSkip?(" · skipped ("+st.lastSkip+")"):"";box.textContent=(st.enabled?"Monitoring on":"Monitoring off")+" · last run "+last+skip;
   }catch(e){box.textContent="Status unavailable"}
 }
 function runHealthNow(){

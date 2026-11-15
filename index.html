@@ -113,6 +113,49 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
 .status-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
 .status-pill.up .dot{background:#34d399}.status-pill.down .dot{background:var(--err)}
 
+
+/* Glasmio-inspired liquid glass depth */
+:root,[data-theme=dark]{
+  --glass:rgba(255,255,255,.06);
+  --glass-h:rgba(255,255,255,.1);
+  --stroke:rgba(255,255,255,.12);
+  --stroke-h:rgba(255,255,255,.2);
+  --spec:linear-gradient(135deg,rgba(255,255,255,.22),transparent 42%,transparent 58%,rgba(255,255,255,.06));
+}
+[data-theme=light]{
+  --glass:rgba(255,255,255,.55);
+  --glass-h:rgba(255,255,255,.78);
+  --stroke:rgba(0,0,0,.08);
+  --stroke-h:rgba(0,0,0,.14);
+  --spec:linear-gradient(135deg,rgba(255,255,255,.7),transparent 40%,transparent 60%,rgba(255,255,255,.25));
+}
+.side,.topbar,.composer-wrap,.settings-card,.modal{
+  box-shadow:0 8px 32px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.12);
+  background-image:var(--spec);
+  background-blend-mode:soft-light;
+}
+.composer{
+  box-shadow:0 8px 40px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.15);
+}
+.btn-new,.composer .send,.modal-actions .btn.primary{
+  box-shadow:0 6px 24px var(--glow), inset 0 1px 0 rgba(255,255,255,.25);
+}
+.settings-card h3{letter-spacing:-.02em}
+.settings-section{
+  margin-top:14px;padding:12px;border-radius:14px;
+  border:1px solid var(--stroke);background:var(--glass);
+}
+.settings-section .sec-title{
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px;
+}
+.msg.user .bubble{
+  box-shadow:0 4px 18px var(--glow), inset 0 1px 0 rgba(255,255,255,.15);
+}
+.msg.bot .bubble{
+  box-shadow:0 4px 16px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.08);
+}
+
 </style>
 </head>
 <body>
@@ -192,7 +235,7 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
 <div class="settings-panel" id="settingsPanel">
   <div class="settings-card">
     <h3>Settings</h3>
-    <p class="sub">Health checks ping each saved provider on a schedule and can notify you when they are up or down. Works in the background on Android.</p>
+    <p class="sub">Health checks ping each saved provider on a schedule and can notify you when they are up or down. Works in the background on Android. If Wi‑Fi and mobile data are off, checks are skipped (not marked as downtime).</p>
 
     <div class="toggle-row">
       <div><div class="lbl">Enable health checks</div><div class="hint">Ping all providers on an interval</div></div>
@@ -207,7 +250,16 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
       <label class="switch"><input type="checkbox" id="hcNotifyDown" checked/><span class="sl"></span></label>
     </div>
 
-    <div class="field" style="margin-top:14px">
+    
+    <div class="toggle-row">
+      <div><div class="lbl">Notification sound</div><div class="hint">Play system sound on alerts</div></div>
+      <label class="switch"><input type="checkbox" id="hcSound" checked/><span class="sl"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="lbl">Vibration</div><div class="hint">Vibrate on health alerts</div></div>
+      <label class="switch"><input type="checkbox" id="hcVibrate" checked/><span class="sl"></span></label>
+    </div>
+<div class="field" style="margin-top:14px">
       <label>Check interval</label>
       <select id="hcInterval">
         <option value="30000">Every 30 seconds</option>
