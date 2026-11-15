@@ -224,6 +224,17 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
 
     <div id="hcStatusBox" class="status-pill">Status: idle</div>
 
+    
+    <div class="field" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--stroke)">
+      <label>Backup & restore</label>
+      <p class="sub" style="margin:4px 0 10px">Export saves providers, chats, and settings to a JSON file (survives uninstall). Import restores them. Data is also auto-backed up on-device while the app is installed.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn" type="button" id="btnExport" style="flex:1;min-width:120px">Export to Downloads</button>
+        <button class="btn" type="button" id="btnImport" style="flex:1;min-width:120px">Import file</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none"/>
+    </div>
+
     <div class="modal-actions" style="margin-top:16px">
       <button class="btn ghost" type="button" id="hcClose">Close</button>
       <button class="btn" type="button" id="hcRunNow">Check now</button>

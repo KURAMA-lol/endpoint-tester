@@ -143,4 +143,111 @@ if($("settingsPanel"))$("settingsPanel").addEventListener("click",function(e){if
   try{syncProvidersNative();syncHealthNative(healthSettings())}catch(e){}
 })();
 
-load();rP();rC();fS();rM();ui();
+
+function hasData(){return !!(window.NativeData&&typeof window.NativeData.saveSnapshot==="function")}
+function buildSnapshot(){
+  return JSON.stringify({
+    version:4,
+    exportedAt:Date.now(),
+    providers:S.providers||[],
+    chats:S.chats||[],
+    pid:S.pid||S.activeProviderId||null,
+    cid:S.cid||S.activeChatId||null,
+    health:healthSettings(),
+    theme:localStorage.getItem("et-theme")||"dark",
+    accent:localStorage.getItem("et-accent")||"violet"
+  });
+}
+function applySnapshot(raw){
+  var data=typeof raw==="string"?JSON.parse(raw):raw;
+  if(!data||!Array.isArray(data.providers)||!data.providers.length)throw new Error("No providers in backup");
+  S.providers=data.providers.map(blankP);
+  S.chats=Array.isArray(data.chats)?data.chats:[];
+  S.pid=data.pid&&S.providers.some(function(p){return p.id===data.pid})?data.pid:S.providers[0].id;
+  S.activeProviderId=S.pid;
+  S.cid=data.cid&&S.chats.some(function(c){return c.id===data.cid})?data.cid:null;
+  S.activeChatId=S.cid;
+  if(data.health)saveHealthLocal(data.health);
+  if(data.theme){try{theme(data.theme)}catch(e){localStorage.setItem("et-theme",data.theme)}}
+  if(data.accent){try{setAccent(data.accent)}catch(e){localStorage.setItem("et-accent",data.accent)}}
+  save();
+  try{syncProvidersNative();syncHealthNative(healthSettings())}catch(e){}
+  try{rP();rC();fS();rM();ui()}catch(e){}
+}
+function autoBackup(){
+  try{
+    var snap=buildSnapshot();
+    if(hasData())window.NativeData.saveSnapshot(snap);
+  }catch(e){}
+}
+function exportBackup(){
+  var snap=buildSnapshot();
+  autoBackup();
+  if(hasData()){
+    try{
+      var path=window.NativeData.exportToDownloads(snap);
+      if(String(path).indexOf("error")===0)alert(path);
+      else alert("Exported to "+path+"\n\nKeep this file. After reinstall, use Import.");
+      return;
+    }catch(e){}
+  }
+  // web fallback
+  try{
+    var blob=new Blob([snap],{type:"application/json"});
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="endpoint-tester-backup.json";
+    a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+    alert("Backup downloaded.");
+  }catch(e){alert("Export failed: "+e)}
+}
+function importBackupFile(file){
+  var reader=new FileReader();
+  reader.onload=function(){
+    try{
+      applySnapshot(String(reader.result||""));
+      autoBackup();
+      alert("Imported "+S.providers.length+" provider(s).");
+      closeSettings();
+    }catch(e){alert("Import failed: "+(e.message||e))}
+  };
+  reader.readAsText(file);
+}
+function tryRestoreFromNative(){
+  if(!hasData())return false;
+  try{
+    var snap=window.NativeData.loadSnapshot();
+    if(!snap)return false;
+    var data=JSON.parse(snap);
+    if(!data.providers||!data.providers.length)return false;
+    // only restore if local is empty/default single empty-ish
+    var localEmpty=!S.providers||S.providers.length===0||(S.providers.length===1&&!(S.providers[0].apiKey||(S.providers[0].baseUrl&&S.providers[0].baseUrl.indexOf("openai.com")>=0&&!S.providers[0].apiKey)&&!(S.chats&&S.chats.length)));
+    // Prefer native if local has no api keys and native has any
+    var localHasKey=(S.providers||[]).some(function(p){return !!(p.apiKey&&p.apiKey.length>3)});
+    var nativeHasKey=(data.providers||[]).some(function(p){return !!(p.apiKey&&p.apiKey.length>3)});
+    if(!localHasKey&&nativeHasKey){
+      applySnapshot(data);
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+if($("btnExport"))$("btnExport").onclick=exportBackup;
+if($("btnImport"))$("btnImport").onclick=function(){$("importFile").click()};
+if($("importFile"))$("importFile").onchange=function(e){
+  var f=e.target.files&&e.target.files[0];
+  if(f)importBackupFile(f);
+  e.target.value="";
+};
+// hook save to auto-backup
+(function(){
+  var _save2=save;
+  save=function(){
+    _save2();
+    try{autoBackup()}catch(e){}
+  };
+})();
+
+load();try{tryRestoreFromNative()}catch(e){}
+rP();rC();fS();rM();ui();
