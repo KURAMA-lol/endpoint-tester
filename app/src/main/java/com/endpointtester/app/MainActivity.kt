@@ -51,6 +51,12 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.webView)
         webView.setBackgroundColor(Color.parseColor("#0b0b10"))
+        webView.isHapticFeedbackEnabled = false
+        webView.isFocusable = true
+        webView.isFocusableInTouchMode = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.defaultFocusHighlightEnabled = false
+        }
 
         val settings = webView.settings
         settings.javaScriptEnabled = true
