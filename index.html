@@ -250,6 +250,15 @@ html[data-theme=light][data-accent=mono]{--accent:#171717;--accent-2:#404040;--g
 .picker-item:hover,.picker-item.active{background:color-mix(in srgb,var(--accent) 18%,transparent)}
 .picker-item .sub{display:block;font-size:11px;color:var(--muted);margin-top:2px}
 
+
+.msg.bot.live .bubble::after{
+  content:"";display:inline-block;width:7px;height:.95em;margin-left:3px;
+  background:var(--accent);border-radius:2px;vertical-align:-2px;
+  animation:caret 1s steps(1) infinite;
+}
+@keyframes caret{50%{opacity:0}}
+.msg.bot.live .bubble:empty::before{content:"Thinking";color:var(--muted);font-size:13px;margin-right:6px}
+
 </style>
 </head>
 <body>

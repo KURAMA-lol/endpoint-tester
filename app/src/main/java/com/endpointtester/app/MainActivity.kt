@@ -240,51 +240,148 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun request(callbackId: String, method: String, urlStr: String, headersJson: String, body: String?) {
             executor.execute {
-                var conn: HttpURLConnection? = null
                 try {
-                    val url = URL(urlStr)
-                    conn = (url.openConnection() as HttpURLConnection).apply {
-                        requestMethod = method.uppercase()
-                        connectTimeout = 30000
-                        readTimeout = 120000
-                        doInput = true
-                        instanceFollowRedirects = true
-                    }
-                    try {
-                        val headers = JSONObject(headersJson.ifBlank { "{}" })
-                        val keys = headers.keys()
-                        while (keys.hasNext()) {
-                            val k = keys.next()
-                            conn.setRequestProperty(k, headers.getString(k))
+                    var result = executeOnce(method, urlStr, headersJson, body)
+                    val gateway = result.status == 502 || result.status == 503 || result.status == 504 ||
+                        result.body.contains("empty gateway", ignoreCase = true)
+                    if (gateway) {
+                        Thread.sleep(800)
+                        val second = executeOnce(method, urlStr, headersJson, body)
+                        if (second.status in 200..299 || (second.error == null && second.body.length >= result.body.length)) {
+                            result = second
                         }
-                    } catch (_: Exception) {}
-                    if (body != null && method.uppercase() != "GET" && method.uppercase() != "HEAD") {
-                        conn.doOutput = true
-                        OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body) }
                     }
-                    val status = try { conn.responseCode } catch (e: Exception) {
-                        deliver(callbackId, e.message ?: "Network error", 0, "", "{}")
-                        return@execute
+                    if (result.error != null && result.status == 0) {
+                        deliver(callbackId, result.error, 0, "", "{}")
+                    } else {
+                        deliver(callbackId, null, result.status, result.body, result.headers)
                     }
-                    val stream = if (status >= 400) conn.errorStream else conn.inputStream
-                    val respBody = if (stream != null) {
-                        BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
-                    } else ""
-                    val respHeaders = JSONObject()
-                    conn.headerFields?.forEach { (k, v) ->
-                        if (k != null) respHeaders.put(k.lowercase(), v?.joinToString(", ") ?: "")
-                    }
-                    deliver(callbackId, null, status, respBody, respHeaders.toString())
                 } catch (e: Exception) {
                     deliver(callbackId, e.message ?: e.toString(), 0, "", "{}")
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun stream(callbackId: String, urlStr: String, headersJson: String, body: String?) {
+            executor.execute {
+                var conn: HttpURLConnection? = null
+                try {
+                    conn = openConn("POST", urlStr, headersJson, body)
+                    val status = conn.responseCode
+                    if (status >= 400) {
+                        val errBody = readAll(conn.errorStream)
+                        emitDone(callbackId, status, errBody.ifBlank { "HTTP $status" })
+                        return@execute
+                    }
+                    val reader = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8))
+                    val buf = StringBuilder()
+                    var lastFlush = android.os.SystemClock.elapsedRealtime()
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        val trimmed = line.trim()
+                        if (!trimmed.startsWith("data:")) continue
+                        val data = trimmed.removePrefix("data:").trim()
+                        if (data == "[DONE]") break
+                        if (data.isEmpty()) continue
+                        try {
+                            val obj = JSONObject(data)
+                            val choice = obj.optJSONArray("choices")?.optJSONObject(0)
+                            val delta = choice?.optJSONObject("delta")
+                            val piece = delta?.optString("content", "") ?: ""
+                            if (piece.isNotEmpty()) buf.append(piece)
+                        } catch (_: Exception) {
+                        }
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (buf.length >= 24 || now - lastFlush > 48) {
+                            if (buf.isNotEmpty()) {
+                                emitDelta(callbackId, buf.toString())
+                                buf.setLength(0)
+                                lastFlush = now
+                            }
+                        }
+                    }
+                    if (buf.isNotEmpty()) emitDelta(callbackId, buf.toString())
+                    emitDone(callbackId, status, null)
+                } catch (e: Exception) {
+                    emitDone(callbackId, 0, e.message ?: e.toString())
                 } finally {
                     conn?.disconnect()
                 }
             }
         }
 
+        private data class HttpResult(val status: Int, val body: String, val headers: String, val error: String?)
+
+        private fun executeOnce(method: String, urlStr: String, headersJson: String, body: String?): HttpResult {
+            var conn: HttpURLConnection? = null
+            try {
+                conn = openConn(method, urlStr, headersJson, body)
+                val status = conn.responseCode
+                val stream = if (status >= 400) conn.errorStream else conn.inputStream
+                val respBody = readAll(stream)
+                val respHeaders = JSONObject()
+                conn.headerFields?.forEach { (k, v) ->
+                    if (k != null) respHeaders.put(k.lowercase(), v?.joinToString(", ") ?: "")
+                }
+                return HttpResult(status, respBody, respHeaders.toString(), null)
+            } catch (e: Exception) {
+                return HttpResult(0, "", "{}", e.message ?: e.toString())
+            } finally {
+                conn?.disconnect()
+            }
+        }
+
+        private fun openConn(method: String, urlStr: String, headersJson: String, body: String?): HttpURLConnection {
+            val conn = (URL(urlStr).openConnection() as HttpURLConnection)
+            conn.requestMethod = method.uppercase()
+            conn.connectTimeout = 30000
+            conn.readTimeout = 120000
+            conn.doInput = true
+            conn.instanceFollowRedirects = true
+            conn.setRequestProperty("User-Agent", "EndpointTester/2.1 (Android)")
+            conn.setRequestProperty("Accept", "application/json, text/event-stream")
+            conn.setRequestProperty("Accept-Encoding", "identity")
+            conn.setRequestProperty("Connection", "close")
+            try {
+                val headers = JSONObject(if (headersJson.isBlank()) "{}" else headersJson)
+                val keys = headers.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    conn.setRequestProperty(k, headers.getString(k))
+                }
+            } catch (_: Exception) {
+            }
+            if (body != null && method.uppercase() != "GET" && method.uppercase() != "HEAD") {
+                val bytes = body.toByteArray(Charsets.UTF_8)
+                conn.doOutput = true
+                conn.setFixedLengthStreamingMode(bytes.size)
+                conn.outputStream.use { it.write(bytes) }
+            }
+            return conn
+        }
+
+        private fun readAll(stream: java.io.InputStream?): String {
+            if (stream == null) return ""
+            return BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { it.readText() }
+        }
+
+        private fun emitDelta(callbackId: String, text: String) {
+            val id = JSONObject.quote(callbackId)
+            val t = JSONObject.quote(text)
+            val script = "(function(){try{var h=window.__streamHandlers&&window.__streamHandlers[" + id + "];if(h&&h.delta)h.delta(" + t + ");}catch(e){}})();"
+            webView.post { webView.evaluateJavascript(script, null) }
+        }
+
+        private fun emitDone(callbackId: String, status: Int, err: String?) {
+            val id = JSONObject.quote(callbackId)
+            val e = if (err == null) "null" else JSONObject.quote(err)
+            val script = "(function(){try{var h=window.__streamHandlers&&window.__streamHandlers[" + id + "];if(h&&h.done)h.done(" + status + "," + e + ");}catch(ex){}})();"
+            webView.post { webView.evaluateJavascript(script, null) }
+        }
+
         private fun deliver(callbackId: String, err: String?, status: Int, body: String, headersJson: String) {
-            val safeId = callbackId.replace("'", "\\'")
+            val safeId = callbackId.replace("'", "\'")
             val errJs = if (err == null) "null" else JSONObject.quote(err)
             val bodyJs = JSONObject.quote(body)
             val headersJs = JSONObject.quote(headersJson)

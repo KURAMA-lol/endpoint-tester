@@ -8,6 +8,7 @@ const PRESETS=[
   {name:"Groq",type:"openai",baseUrl:"https://api.groq.com/openai/v1",model:"llama-3.3-70b-versatile"},
   {name:"Together",type:"openai",baseUrl:"https://api.together.xyz/v1",model:"meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"},
   {name:"Gemini",type:"gemini",baseUrl:"https://generativelanguage.googleapis.com/v1beta",model:"gemini-2.0-flash"},
+  {name:"Grok",type:"openai",baseUrl:"https://api.x.ai/v1",model:"grok-4"},
   {name:"Ollama",type:"keyless",baseUrl:"http://127.0.0.1:11434/v1",model:"llama3.2"}
 ];
 
@@ -88,7 +89,16 @@ function scrub(s){ return String(s==null?'':s).replace(/\u0000/g,'').slice(0,200
 
 const join=(a,b)=>(a||"").replace(/\/+$/,"")+(b.startsWith("/")?b:"/"+b);
 const host=u=>{try{return new URL(u).host}catch{return(u||"").slice(0,18)}};
-const ferr=(s,b)=>typeof b==="string"?s+": "+b.slice(0,250):s+": "+((b&&b.error&&b.error.message)||(b&&b.message)||JSON.stringify(b).slice(0,250));
+const ferr=(s,b)=>{
+  var raw=typeof b==="string"?b.slice(0,400):((b&&b.error&&b.error.message)||(b&&b.message)||JSON.stringify(b||"").slice(0,400));
+  var txt=String(raw||"");
+  if(s===502||/empty gateway/i.test(txt)){
+    return "502 from the API gateway. The provider sent an empty error — usually a bad model name, a base URL that is not .../v1, or the gateway is overloaded. The app already retried once. For Grok use https://api.x.ai/v1 and a model like grok-4.";
+  }
+  if(s===401||s===403) return s+": key rejected. Check the API key for this provider.";
+  if(s===404) return "404: that path or model was not found. Base URL should include /v1 for OpenAI-style APIs.";
+  return (s?s+": ":"")+txt.slice(0,250);
+};
 
 function rP(){const L=$("providerList");L.innerHTML="";S.providers.forEach(p=>{const el=document.createElement("div");el.className="item"+(p.id===S.pid?" active":"");el.innerHTML=`<span class="dot-p"></span><div class="meta"><div class="name"></div><div class="sub"></div></div><div class="act"><button type="button" data-e title="Edit">Edit</button><button type="button" data-d class="danger" title="Delete">Del</button></div>`;el.querySelector(".name").textContent=p.name;el.querySelector(".sub").textContent=(p.model||p.type)+" · "+host(p.baseUrl);el.onclick=e=>{if(e.target.closest("[data-e]")){e.stopPropagation();openM(p.id);return}if(e.target.closest("[data-d]")){e.stopPropagation();delP(p.id);return}setP(p.id)};L.appendChild(el)});fS()}
 function rC(){const L=$("chatList");L.innerHTML="";const sorted=[...S.chats].sort((a,b)=>b.createdAt-a.createdAt);if(!sorted.length){L.innerHTML='<div style="padding:8px;font-size:12px;color:var(--muted)">No chats yet</div>';return}sorted.forEach(c=>{const p=S.providers.find(x=>x.id===c.providerId);const el=document.createElement("div");el.className="item"+(c.id===S.cid?" active":"");el.innerHTML=`<div class="meta"><div class="name"></div><div class="sub"></div></div><div class="act"><button type="button" data-d class="danger">Del</button></div>`;el.querySelector(".name").textContent=c.title||"New chat";el.querySelector(".sub").textContent=p?p.name:"";el.onclick=e=>{if(e.target.closest("[data-d]")){e.stopPropagation();delC(c.id);return}setC(c.id)};L.appendChild(el)})}
@@ -172,7 +182,7 @@ function rM(){const inner=$("msgsInner");const c=C();inner.innerHTML="";if(!(c&&
     row.querySelector(".bubble").textContent=m.content;
   }else{
     const u=m.role==="user";
-    row.className="msg "+(u?"user":"bot");
+    row.className="msg "+(u?"user":"bot")+(!u&&S.streaming&&idx===c.messages.length-1?" live":"");
     row.innerHTML='<div class="av">'+(u?"U":"AI")+'</div><div class="col" style="min-width:0"><div class="bubble"></div><div class="msg-actions"></div></div>';
     row.querySelector(".bubble").innerHTML=md(m.content||"");
     const act=row.querySelector(".msg-actions");
@@ -217,7 +227,72 @@ async function regenerate(){
   await send();
 }
 
-async function send(){const text=$("userInput").value.trim();if(!text||S.streaming)return;const p=P();if(!p)return;/* model from provider */const c=ensure();if(c.title==="New chat")c.title=text.slice(0,40);c.providerId=p.id;const api=[];if(p.systemPrompt)api.push({role:"system",content:p.systemPrompt});for(const m of c.messages)if(m.role==="user"||m.role==="assistant")api.push(m);api.push({role:"user",content:text});c.messages.push({role:"user",content:scrub(text)});$("userInput").value="";rM();rC();S.streaming=true;ui();c.messages.push({role:"assistant",content:"..."});rM();try{const{res}=p.type==="gemini"?await callG(p,api,false):await callOA(p,api,false);const full=await body(res,p.type)||"(empty)";c.messages[c.messages.length-1].content=scrub(full);rM();save()}catch(e){c.messages.pop();c.messages.push({role:"error",content:e.message||String(e)});rM();save()}finally{S.streaming=false;ui();rC()}}
+
+function streamChat(p,msgs,onDelta){
+  return new Promise(function(resolve,reject){
+    if(!(window.NativeHttp&&window.NativeHttp.stream)) return reject(new Error("no stream"));
+    var id="s"+Date.now()+Math.floor(Math.random()*1000);
+    var acc="";
+    window.__streamHandlers=window.__streamHandlers||{};
+    window.__streamHandlers[id]={
+      delta:function(t){acc+=t;if(onDelta)onDelta(t,acc);},
+      done:function(status,err){
+        delete window.__streamHandlers[id];
+        if(err&&!acc){
+          var j=err; try{j=JSON.parse(err)}catch(e){}
+          reject(new Error(ferr(status||502,j)));
+        } else resolve(acc);
+      }
+    };
+    var h={"Content-Type":"application/json"};
+    if(p.apiKey)h.Authorization="Bearer "+p.apiKey;
+    var body=JSON.stringify({model:p.model,messages:msgs,temperature:p.temperature,max_tokens:p.maxTokens,stream:true});
+    try{
+      window.NativeHttp.stream(id, join(p.baseUrl,"/chat/completions"), JSON.stringify(h), body);
+    }catch(e){
+      delete window.__streamHandlers[id];
+      reject(e);
+    }
+  });
+}
+
+async function send(){
+  const text=$("userInput").value.trim();if(!text||S.streaming)return;
+  const p=P();if(!p)return;
+  const c=ensure();
+  if(c.title==="New chat")c.title=text.slice(0,40);
+  c.providerId=p.id;
+  const api=[];
+  if(p.systemPrompt)api.push({role:"system",content:p.systemPrompt});
+  for(const m of c.messages)if(m.role==="user"||m.role==="assistant")api.push(m);
+  api.push({role:"user",content:text});
+  c.messages.push({role:"user",content:scrub(text)});
+  $("userInput").value="";
+  rM();rC();
+  S.streaming=true;ui();
+  c.messages.push({role:"assistant",content:""});
+  rM();
+  var painted=0;
+  function paint(){if(painted)return;painted=1;requestAnimationFrame(function(){painted=0;rM();var box=$("messages");if(box)box.scrollTop=box.scrollHeight;});}
+  const t0=Date.now();
+  try{
+    var full="";
+    if(p.type!=="gemini"&&window.NativeHttp&&window.NativeHttp.stream){
+      full=await streamChat(p,api,function(){paint();});
+    }else{
+      const out=p.type==="gemini"?await callG(p,api,false):await callOA(p,api,false);
+      full=await body(out.res,p.type)||"(empty)";
+    }
+    c.messages[c.messages.length-1].content=scrub(full||"(empty)");
+    if(typeof showInspector==="function")showInspector({ok:true,status:200,latencyMs:Date.now()-t0,model:p.model,provider:p.name});
+    rM();save();
+  }catch(e){
+    if(typeof showInspector==="function")showInspector({ok:false,status:0,latencyMs:Date.now()-t0,model:p.model,provider:p.name,error:e.message||String(e)});
+    c.messages.pop();
+    c.messages.push({role:"error",content:e.message||String(e)});
+    rM();save();
+  }finally{S.streaming=false;ui();rC();rM();}
+}
 function theme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("et-theme",t)}
 $("themeBtn").onclick=()=>theme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
 theme(localStorage.getItem("et-theme")||"dark");
