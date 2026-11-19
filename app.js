@@ -159,14 +159,14 @@ if($("selModel"))$("selModel").onchange=function(){var p=P();if(p){p.model=$("se
 $("sendBtn").onclick=send;
 $("userInput").onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}};
 
-function setAccent(a){
+function setAccent(a){try{
   document.documentElement.setAttribute('data-accent', a);
   localStorage.setItem('et-accent', a);
   document.querySelectorAll('.accent-dot').forEach(function(el){
     el.classList.toggle('on', el.getAttribute('data-accent')===a);
   });
 }
-(function initAccent(){
+(function initAccent(){try{
   var a=localStorage.getItem('et-accent')||'violet';
   setAccent(a);
   var row=document.getElementById('accentRow');
@@ -174,7 +174,7 @@ function setAccent(a){
     var btn=e.target.closest('[data-accent]');
     if(btn) setAccent(btn.getAttribute('data-accent'));
   });
-})();
+}catch(e){console&&console.warn&&console.warn(e)}})();
 
 
 function hasHealth(){return !!(window.NativeHealth&&typeof window.NativeHealth.configure==="function")}
