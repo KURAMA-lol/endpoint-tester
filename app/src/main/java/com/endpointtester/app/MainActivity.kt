@@ -20,7 +20,12 @@ import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -33,6 +38,12 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private val executor = Executors.newCachedThreadPool()
+    private val okHttp = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
 
     companion object {
@@ -265,53 +276,71 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun stream(callbackId: String, urlStr: String, headersJson: String, body: String?) {
             executor.execute {
-                var conn: HttpURLConnection? = null
                 try {
-                    conn = openConn("POST", urlStr, headersJson, body)
-                    val status = conn.responseCode
-                    if (status >= 400) {
-                        val errBody = readAll(conn.errorStream)
-                        emitDone(callbackId, status, errBody.ifBlank { "HTTP $status" })
-                        return@execute
+                    val bytes = (body ?: "{}").toByteArray(Charsets.UTF_8)
+                    val reqBody = bytes.toRequestBody("application/json; charset=utf-8".toMediaType())
+                    val builder = Request.Builder()
+                        .url(urlStr)
+                        .post(reqBody)
+                        .header("Accept", "text/event-stream, application/json")
+                        .header("Accept-Encoding", "identity")
+                        .header("User-Agent", "EndpointTester/2.2 (Android)")
+                    try {
+                        val headers = JSONObject(if (headersJson.isBlank()) "{}" else headersJson)
+                        val keys = headers.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            val v = headers.optString(k, "")
+                            if (k.equals("Content-Length", true) || k.equals("Accept-Encoding", true)) continue
+                            if (v.isNotEmpty()) builder.header(k, v)
+                        }
+                    } catch (_: Exception) {
                     }
-                    val reader = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8))
-                    val buf = StringBuilder()
-                    val streamAcc = StringBuilder()
-                    var lastFlush = android.os.SystemClock.elapsedRealtime()
-                    while (true) {
-                        val line = reader.readLine() ?: break
-                        val trimmed = line.trim()
-                        if (trimmed.isEmpty() || trimmed.startsWith(":")) continue
-                        val data = when {
-                            trimmed.startsWith("data:") -> trimmed.removePrefix("data:").trim()
-                            trimmed.startsWith("{") -> trimmed
-                            else -> ""
+                    okHttp.newCall(builder.build()).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            val errBody = response.body?.string().orEmpty()
+                            emitDone(callbackId, response.code, errBody.ifBlank { "HTTP ${response.code}" })
+                            return@execute
                         }
-                        if (data.isEmpty()) continue
-                        if (data == "[DONE]") break
-                        try {
-                            val piece = takeStreamPiece(JSONObject(data), streamAcc)
-                            if (piece.isNotEmpty()) {
-                                streamAcc.append(piece)
-                                buf.append(piece)
+                        val source = response.body?.source()
+                        if (source == null) {
+                            emitDone(callbackId, response.code, "Empty stream")
+                            return@execute
+                        }
+                        val buf = StringBuilder()
+                        val streamAcc = StringBuilder()
+                        var lastFlush = android.os.SystemClock.elapsedRealtime()
+                        while (!source.exhausted()) {
+                            val line = source.readUtf8Line() ?: break
+                            val trimmed = line.trim()
+                            if (trimmed.isEmpty() || trimmed.startsWith(":")) continue
+                            val data = when {
+                                trimmed.startsWith("data:") -> trimmed.removePrefix("data:").trim()
+                                trimmed.startsWith("{") -> trimmed
+                                else -> ""
                             }
-                        } catch (_: Exception) {
-                        }
-                        val now = android.os.SystemClock.elapsedRealtime()
-                        if (buf.length >= 24 || now - lastFlush > 48) {
-                            if (buf.isNotEmpty()) {
+                            if (data.isEmpty()) continue
+                            if (data == "[DONE]") break
+                            try {
+                                val piece = takeStreamPiece(JSONObject(data), streamAcc)
+                                if (piece.isNotEmpty()) {
+                                    streamAcc.append(piece)
+                                    buf.append(piece)
+                                }
+                            } catch (_: Exception) {
+                            }
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (buf.isNotEmpty() && (buf.length >= 12 || now - lastFlush > 32)) {
                                 emitDelta(callbackId, buf.toString())
                                 buf.setLength(0)
                                 lastFlush = now
                             }
                         }
+                        if (buf.isNotEmpty()) emitDelta(callbackId, buf.toString())
+                        emitDone(callbackId, response.code, null)
                     }
-                    if (buf.isNotEmpty()) emitDelta(callbackId, buf.toString())
-                    emitDone(callbackId, status, null)
                 } catch (e: Exception) {
                     emitDone(callbackId, 0, e.message ?: e.toString())
-                } finally {
-                    conn?.disconnect()
                 }
             }
         }

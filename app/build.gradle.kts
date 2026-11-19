@@ -9,8 +9,8 @@ android {
         applicationId = "com.endpointtester.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "2.1.1"
+        versionCode = 17
+        versionName = "2.2.0"
     }
     signingConfigs {
         create("release") {
@@ -44,4 +44,5 @@ android {
 dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.core:core-ktx:1.12.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }

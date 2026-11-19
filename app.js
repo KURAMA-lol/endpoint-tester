@@ -235,7 +235,15 @@ function streamChat(p,msgs,onDelta){
     var acc="";
     window.__streamHandlers=window.__streamHandlers||{};
     window.__streamHandlers[id]={
-      delta:function(t){acc+=t;if(onDelta)onDelta(t,acc);},
+      delta:function(t){
+        acc+=t;
+        var bubble=document.querySelector(".msg.bot.live .bubble");
+        if(bubble){
+          bubble.textContent=acc;
+          var box=document.getElementById("messages");
+          if(box)box.scrollTop=box.scrollHeight;
+        } else if(onDelta) onDelta(t,acc);
+      },
       done:function(status,err){
         delete window.__streamHandlers[id];
         if(err&&!acc){
