@@ -159,23 +159,32 @@ if($("selModel"))$("selModel").onchange=function(){var p=P();if(p){p.model=$("se
 $("sendBtn").onclick=send;
 $("userInput").onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}};
 
-function setAccent(a){try{
-  document.documentElement.setAttribute('data-accent', a);
-  localStorage.setItem('et-accent', a);
-  document.querySelectorAll('.accent-dot').forEach(function(el){
-    el.classList.toggle('on', el.getAttribute('data-accent')===a);
-  });
+function setAccent(a){
+  try{
+    document.documentElement.setAttribute("data-accent", a);
+    localStorage.setItem("et-accent", a);
+    var dots=document.querySelectorAll(".accent-dot");
+    for(var i=0;i<dots.length;i++){
+      var el=dots[i];
+      if(el.classList) el.classList.toggle("on", el.getAttribute("data-accent")===a);
+    }
+  }catch(e){}
 }
-(function initAccent(){try{
-  var a=localStorage.getItem('et-accent')||'violet';
-  setAccent(a);
-  var row=document.getElementById('accentRow');
-  if(row) row.addEventListener('click',function(e){
-    var btn=e.target.closest('[data-accent]');
-    if(btn) setAccent(btn.getAttribute('data-accent'));
-  });
-}catch(e){console&&console.warn&&console.warn(e)}})();
-
+(function initAccent(){
+  try{
+    var a=localStorage.getItem("et-accent")||"violet";
+    setAccent(a);
+    var row=document.getElementById("accentRow");
+    if(row) row.addEventListener("click",function(e){
+      var t=e.target;
+      while(t&&t!==row&&!(t.getAttribute&&t.getAttribute("data-accent"))) t=t.parentNode;
+      if(t&&t.getAttribute){
+        var acc=t.getAttribute("data-accent");
+        if(acc) setAccent(acc);
+      }
+    });
+  }catch(e){}
+})();
 
 function hasHealth(){return !!(window.NativeHealth&&typeof window.NativeHealth.configure==="function")}
 function healthSettings(){
