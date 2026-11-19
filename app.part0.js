@@ -244,11 +244,28 @@ function streamChat(p,msgs,onDelta){
         } else resolve(acc);
       }
     };
-    var h={"Content-Type":"application/json"};
-    if(p.apiKey)h.Authorization="Bearer "+p.apiKey;
-    var body=JSON.stringify({model:p.model,messages:msgs,temperature:p.temperature,max_tokens:p.maxTokens,stream:true});
+    var headers={"Content-Type":"application/json"};
+    var url, body;
+    if(p.type==="gemini"){
+      if(!p.apiKey){delete window.__streamHandlers[id];return reject(new Error("API key required"));}
+      var base=(p.baseUrl||"").replace(/\/+$/,"");
+      url=base+"/models/"+encodeURIComponent(p.model)+":streamGenerateContent?alt=sse&key="+encodeURIComponent(p.apiKey);
+      var contents=[], sys=null;
+      for(var n=0;n<msgs.length;n++){
+        var m=msgs[n];
+        if(m.role==="system"){sys={parts:[{text:m.content}]};continue;}
+        contents.push({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]});
+      }
+      var payload={contents:contents,generationConfig:{temperature:p.temperature,maxOutputTokens:p.maxTokens}};
+      if(sys)payload.systemInstruction=sys;
+      body=JSON.stringify(payload);
+    }else{
+      if(p.apiKey)headers.Authorization="Bearer "+p.apiKey;
+      url=join(p.baseUrl,"/chat/completions");
+      body=JSON.stringify({model:p.model,messages:msgs,temperature:p.temperature,max_tokens:p.maxTokens,stream:true});
+    }
     try{
-      window.NativeHttp.stream(id, join(p.baseUrl,"/chat/completions"), JSON.stringify(h), body);
+      window.NativeHttp.stream(id, url, JSON.stringify(headers), body);
     }catch(e){
       delete window.__streamHandlers[id];
       reject(e);
@@ -277,8 +294,14 @@ async function send(){
   const t0=Date.now();
   try{
     var full="";
-    if(p.type!=="gemini"&&window.NativeHttp&&window.NativeHttp.stream){
-      full=await streamChat(p,api,function(){paint();});
+    if(window.NativeHttp&&window.NativeHttp.stream){
+      try{
+        full=await streamChat(p,api,function(){paint();});
+      }catch(streamErr){
+        if(c.messages[c.messages.length-1].content) throw streamErr;
+        const out=p.type==="gemini"?await callG(p,api,false):await callOA(p,api,false);
+        full=await body(out.res,p.type)||"(empty)";
+      }
     }else{
       const out=p.type==="gemini"?await callG(p,api,false):await callOA(p,api,false);
       full=await body(out.res,p.type)||"(empty)";

@@ -276,20 +276,25 @@ class MainActivity : AppCompatActivity() {
                     }
                     val reader = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8))
                     val buf = StringBuilder()
+                    val streamAcc = StringBuilder()
                     var lastFlush = android.os.SystemClock.elapsedRealtime()
                     while (true) {
                         val line = reader.readLine() ?: break
                         val trimmed = line.trim()
-                        if (!trimmed.startsWith("data:")) continue
-                        val data = trimmed.removePrefix("data:").trim()
-                        if (data == "[DONE]") break
+                        if (trimmed.isEmpty() || trimmed.startsWith(":")) continue
+                        val data = when {
+                            trimmed.startsWith("data:") -> trimmed.removePrefix("data:").trim()
+                            trimmed.startsWith("{") -> trimmed
+                            else -> ""
+                        }
                         if (data.isEmpty()) continue
+                        if (data == "[DONE]") break
                         try {
-                            val obj = JSONObject(data)
-                            val choice = obj.optJSONArray("choices")?.optJSONObject(0)
-                            val delta = choice?.optJSONObject("delta")
-                            val piece = delta?.optString("content", "") ?: ""
-                            if (piece.isNotEmpty()) buf.append(piece)
+                            val piece = takeStreamPiece(JSONObject(data), streamAcc)
+                            if (piece.isNotEmpty()) {
+                                streamAcc.append(piece)
+                                buf.append(piece)
+                            }
                         } catch (_: Exception) {
                         }
                         val now = android.os.SystemClock.elapsedRealtime()
@@ -359,6 +364,37 @@ class MainActivity : AppCompatActivity() {
                 conn.outputStream.use { it.write(bytes) }
             }
             return conn
+        }
+
+
+        private fun takeStreamPiece(obj: JSONObject, acc: StringBuilder): String {
+            var piece = ""
+            val choice = obj.optJSONArray("choices")?.optJSONObject(0)
+            if (choice != null) {
+                val delta = choice.optJSONObject("delta")
+                piece = delta?.optString("content", "") ?: ""
+                if (piece.isEmpty()) {
+                    piece = choice.optJSONObject("message")?.optString("content", "") ?: ""
+                }
+            }
+            if (piece.isEmpty()) {
+                val parts = obj.optJSONArray("candidates")
+                    ?.optJSONObject(0)
+                    ?.optJSONObject("content")
+                    ?.optJSONArray("parts")
+                if (parts != null) {
+                    val sb = StringBuilder()
+                    for (i in 0 until parts.length()) {
+                        sb.append(parts.optJSONObject(i)?.optString("text", "") ?: "")
+                    }
+                    piece = sb.toString()
+                }
+            }
+            if (piece.isEmpty()) return ""
+            val soFar = acc.toString()
+            if (soFar.isNotEmpty() && piece.startsWith(soFar)) return piece.substring(soFar.length)
+            if (soFar.endsWith(piece)) return ""
+            return piece
         }
 
         private fun readAll(stream: java.io.InputStream?): String {
