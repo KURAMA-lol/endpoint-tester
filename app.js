@@ -10,7 +10,6 @@ const PRESETS=[
   {name:"Gemini",type:"gemini",baseUrl:"https://generativelanguage.googleapis.com/v1beta",model:"gemini-2.0-flash"},
   {name:"Ollama",type:"keyless",baseUrl:"http://127.0.0.1:11434/v1",model:"llama3.2"}
 ];
-S.lastMeta=S.lastMeta||null;
 
 function esc(s){
   return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -29,7 +28,7 @@ function md(s){
 function showInspector(meta){
   var el=$("inspector"); if(!el)return;
   if(!meta){el.classList.remove("show");el.innerHTML="";return}
-  S.lastMeta=meta;
+
   el.classList.add("show");
   var ok=meta.ok!==false && (!meta.status || (meta.status>=200&&meta.status<300));
   el.innerHTML='<span class="chip "+(ok?"ok":"bad")+">'+esc(String(meta.status||(ok?"OK":"ERR")))+'</span>'
@@ -66,6 +65,8 @@ function fillPresets(){
 }
 
 const S={providers:[],chats:[],pid:null,cid:null,streaming:false,editId:null};
+S.lastMeta=null;
+
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 function blankP(x={}){const t=x.type||"openai",d=DEF[t];return{id:x.id||uid("p"),name:x.name||"Provider",type:t,baseUrl:x.baseUrl||d.baseUrl,apiKey:x.apiKey||"",model:x.model||d.model,models:x.models||[],temperature:(x.temperature!=null?x.temperature:.7),maxTokens:x.maxTokens||1024,stream:(x.stream!=null?x.stream:true),systemPrompt:x.systemPrompt||""}}
 function blankC(pid){return{id:uid("c"),providerId:pid||S.pid,title:"New chat",messages:[],createdAt:Date.now()}}
